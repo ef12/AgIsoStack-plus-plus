@@ -54,4 +54,8 @@
 #include "isobus/hardware_integration/sil_kit_plugin.hpp"
 #endif
 
+#ifdef ISOBUS_SILVCAN_AVAILABLE
+#include "isobus/hardware_integration/sil_vcan_plugin.hpp"
+#endif
+
 #endif // AVAILABLE_CAN_DRIVERS_HPP

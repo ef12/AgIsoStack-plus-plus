@@ -8,7 +8,8 @@
             "args": [
                 "-B",
                 "build",
-                "-DBUILD_EXAMPLES=ON"
+                "-DBUILD_EXAMPLES=ON",
+                "-DCAN_DRIVER=SilVcan"
             ],
             "group": "build",
             "problemMatcher": [],

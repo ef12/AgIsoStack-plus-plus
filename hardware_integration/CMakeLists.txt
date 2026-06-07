@@ -108,6 +108,10 @@ if("SILKit" IN_LIST CAN_DRIVER)
   list(APPEND HARDWARE_INTEGRATION_SRC "sil_kit_plugin.cpp")
   list(APPEND HARDWARE_INTEGRATION_INCLUDE "sil_kit_plugin.hpp")
 endif()
+if("SilVcan" IN_LIST CAN_DRIVER)
+  list(APPEND HARDWARE_INTEGRATION_SRC "sil_vcan_plugin.cpp")
+  list(APPEND HARDWARE_INTEGRATION_INCLUDE "sil_vcan_plugin.hpp")
+endif()
 
 # Prepend the source directory path to all the source files
 prepend(HARDWARE_INTEGRATION_SRC ${HARDWARE_INTEGRATION_SRC_DIR}
@@ -359,6 +363,15 @@ endif()
 if("SILKit" IN_LIST CAN_DRIVER)
   find_package(SilKit REQUIRED)
   target_link_libraries(HardwareIntegration PUBLIC SilKit::SilKit)
+endif()
+if("SilVcan" IN_LIST CAN_DRIVER)
+  include(FetchContent)
+  FetchContent_Declare(
+    SIL
+    GIT_REPOSITORY https://github.com/ef12/SIL.git
+    GIT_TAG main)
+  FetchContent_MakeAvailable(SIL)
+  target_link_libraries(HardwareIntegration PUBLIC sil_lib)
 endif()
 
 # Mark the compiled CAN drivers available to other modules. In the form:

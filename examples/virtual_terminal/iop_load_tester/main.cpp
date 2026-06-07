@@ -144,7 +144,24 @@ int main(int argc, char **argv)
 
 	std::string interfaceName = argc <= 2 ? "vcan0" : argv[2];
 	std::shared_ptr<isobus::CANHardwarePlugin> canDriver = nullptr;
-#if defined(ISOBUS_SOCKETCAN_AVAILABLE)
+#if defined(ISOBUS_SILVCAN_AVAILABLE)
+	std::uint16_t localPort = 9001;
+	std::uint16_t remotePort = 9000;
+	std::string remoteIp = "127.0.0.1";
+	if (argc > 2)
+	{
+		localPort = static_cast<std::uint16_t>(std::stoi(argv[2]));
+	}
+	if (argc > 3)
+	{
+		remotePort = static_cast<std::uint16_t>(std::stoi(argv[3]));
+	}
+	if (argc > 4)
+	{
+		remoteIp = argv[4];
+	}
+	canDriver = std::make_shared<isobus::SilVcanPlugin>(localPort, remoteIp, remotePort);
+#elif defined(ISOBUS_SOCKETCAN_AVAILABLE)
 	canDriver = std::make_shared<isobus::SocketCANInterface>(interfaceName);
 #elif defined(ISOBUS_WINDOWSINNOMAKERUSB2CAN_AVAILABLE)
 	int channel = interfaceName.empty() ? 0 : std::stoi(interfaceName);
@@ -166,7 +183,10 @@ int main(int argc, char **argv)
 
 	isobus::CANStackLogger::set_can_stack_logger_sink(&logger);
 	isobus::CANStackLogger::set_log_level(isobus::CANStackLogger::LoggingLevel::Info); // Change this to Debug to see more information
-	isobus::CANHardwareInterface::set_number_of_can_channels(1);
+	isobus::CANNetworkManager::CANNetwork.get_configuration().set_number_of_packets_per_dpo_message(255);
+	isobus::CANNetworkManager::CANNetwork.get_configuration().set_number_of_packets_per_cts_message(255);
+	isobus::CANNetworkManager::CANNetwork.get_configuration().set_max_number_of_network_manager_protocol_frames_per_update(32);
+	isobus::CANHardwareInterface::set_number_of_can_channels(1, 512);
 	isobus::CANHardwareInterface::assign_can_channel_frame_handler(0, canDriver);
 
 	if ((!isobus::CANHardwareInterface::start()) || (!canDriver->get_is_valid()))
