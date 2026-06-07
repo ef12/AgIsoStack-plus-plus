@@ -1,0 +1,64 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "CMake Configure",
+            "type": "shell",
+            "command": "cmake",
+            "args": [
+                "-B",
+                "build",
+                "-DBUILD_EXAMPLES=ON"
+            ],
+            "group": "build",
+            "problemMatcher": [],
+            "detail": "Configure CMake project with examples enabled"
+        },
+        {
+            "label": "Build iop_load_tester",
+            "type": "shell",
+            "command": "cmake",
+            "args": [
+                "--build",
+                "build",
+                "--target",
+                "iop_loader",
+                "--config",
+                "Release"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": false
+            },
+            "problemMatcher": "$msCompile",
+            "detail": "Build the iop_load_tester example (Release)",
+            "dependsOn": []
+        },
+        {
+            "label": "Clean iop_load_tester",
+            "type": "shell",
+            "command": "cmake",
+            "args": [
+                "--build",
+                "build",
+                "--target",
+                "iop_loader",
+                "--config",
+                "Release",
+                "--clean-first"
+            ],
+            "group": "build",
+            "problemMatcher": "$msCompile",
+            "detail": "Clean and rebuild the iop_load_tester example"
+        },
+        {
+            "label": "Run iop_load_tester",
+            "type": "shell",
+            "command": "${workspaceFolder}/build/examples/virtual_terminal/iop_load_tester/Release/iop_loader.exe",
+            "group": "test",
+            "problemMatcher": [],
+            "detail": "Run the iop_load_tester executable",
+            "dependsOn": "Build iop_load_tester"
+        }
+    ]
+}

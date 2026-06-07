@@ -40,7 +40,6 @@ Makefile
 *.DS_Store
 
 # Editor
-*.vscode
 .vs
 
 # build
