@@ -112,6 +112,10 @@ if("SilVcan" IN_LIST CAN_DRIVER)
   list(APPEND HARDWARE_INTEGRATION_SRC "sil_vcan_plugin.cpp")
   list(APPEND HARDWARE_INTEGRATION_INCLUDE "sil_vcan_plugin.hpp")
 endif()
+if("WCAN" IN_LIST CAN_DRIVER)
+  list(APPEND HARDWARE_INTEGRATION_SRC "wcan_plugin.cpp")
+  list(APPEND HARDWARE_INTEGRATION_INCLUDE "wcan_plugin.hpp")
+endif()
 
 # Prepend the source directory path to all the source files
 prepend(HARDWARE_INTEGRATION_SRC ${HARDWARE_INTEGRATION_SRC_DIR}
