@@ -24,6 +24,13 @@ if(BUILD_TESTING AND NOT "VirtualCAN" IN_LIST CAN_DRIVER)
   list(APPEND CAN_DRIVER "VirtualCAN")
 endif()
 
+# WCAN is a shared-memory virtual CAN bus. Like VirtualCAN it needs no hardware,
+# and its library is vendored with this project, so it is always available on
+# Windows and consumers do not have to ask for it.
+if(WIN32 AND NOT "WCAN" IN_LIST CAN_DRIVER)
+  list(APPEND CAN_DRIVER "WCAN")
+endif()
+
 # Set the source files
 set(HARDWARE_INTEGRATION_SRC "can_hardware_interface.cpp"
                              "vector_asc_logger.cpp")
@@ -115,6 +122,12 @@ endif()
 if("WCAN" IN_LIST CAN_DRIVER)
   list(APPEND HARDWARE_INTEGRATION_SRC "wcan_plugin.cpp")
   list(APPEND HARDWARE_INTEGRATION_INCLUDE "wcan_plugin.hpp")
+  list(APPEND HARDWARE_INTEGRATION_INCLUDE "wcan.h")
+  list(APPEND HARDWARE_INTEGRATION_INCLUDE "wcan_types.h")
+  list(APPEND HARDWARE_INTEGRATION_INCLUDE "wcan_validate.h")
+  list(APPEND HARDWARE_INTEGRATION_INCLUDE "wcan_airtime.h")
+  list(APPEND HARDWARE_INTEGRATION_INCLUDE "wcan_export.h")
+  list(APPEND HARDWARE_INTEGRATION_INCLUDE "wcan_layout.h")
 endif()
 
 # Prepend the source directory path to all the source files
@@ -376,6 +389,30 @@ if("SilVcan" IN_LIST CAN_DRIVER)
     GIT_TAG main)
   FetchContent_MakeAvailable(SIL)
   target_link_libraries(HardwareIntegration PUBLIC sil_lib)
+endif()
+if("WCAN" IN_LIST CAN_DRIVER)
+  # WCAN is developed in the SIL repository and vendored here as a prebuilt
+  # library plus its public headers, the same way the PEAK, InnoMaker and
+  # SYS TEC drivers are. Consumers select the driver and nothing more; they do
+  # not supply the library. Refresh it with tools/sync_wcan.ps1.
+  if(MSVC)
+    set(WCAN_LIBRARY "${CMAKE_CURRENT_LIST_DIR}/lib/Windows/wcan_x64.lib")
+  else()
+    set(WCAN_LIBRARY "${CMAKE_CURRENT_LIST_DIR}/lib/Windows/libwcan_x64.a")
+  endif()
+
+  if(NOT EXISTS "${WCAN_LIBRARY}")
+    message(
+      FATAL_ERROR
+        "WCAN driver selected but ${WCAN_LIBRARY} is missing. Run tools/sync_wcan.ps1 to build it from the SIL repository."
+    )
+  endif()
+
+  message(STATUS "Linking vendored WCAN library: ${WCAN_LIBRARY}")
+  # advapi32 for the synchronisation objects, winmm for the timer resolution
+  # WCAN raises while pacing a bus.
+  target_link_libraries(HardwareIntegration PRIVATE "${WCAN_LIBRARY}" advapi32
+                                                    winmm)
 endif()
 
 # Mark the compiled CAN drivers available to other modules. In the form:

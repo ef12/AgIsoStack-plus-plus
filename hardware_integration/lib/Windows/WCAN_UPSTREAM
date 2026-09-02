@@ -1,0 +1,14 @@
+# Provenance of the vendored WCAN driver library.
+# Written by tools/sync_wcan.ps1 - do not edit by hand.
+#
+# WCAN is developed in the SIL repository under sil_lib/wcan. Only the built
+# libraries and the public headers are vendored here; the sources are not.
+# Change WCAN upstream, then re-run the sync script.
+
+url:       https://github.com/ef12/SIL.git
+branch:    main
+commit:    725b05f503d85365d641c508f0122fc7aec5020d
+subdir:    sil_lib/wcan
+libraries: wcan_x64.lib (56522 bytes), libwcan_x64.a (16874 bytes)
+headers:   wcan.h, wcan_types.h, wcan_validate.h, wcan_airtime.h, wcan_export.h, wcan_layout.h
+built:     2026-09-02T21:34:21Z
