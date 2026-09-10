@@ -48,6 +48,7 @@ namespace isobus
 		std::fstream logFileStream; ///< The file to log to
 		isobus::EventCallbackHandle canFrameReceivedListener = 0; ///< A listener for received frames
 		isobus::EventCallbackHandle canFrameSentListener = 0; ///< A listener for sent frames
+		bool listenersRegistered = false; ///< True if the frame logger subscribed to the hardware events
 		std::uint32_t initialTimestamp; ///< The initial timestamp of the logger
 	};
 }

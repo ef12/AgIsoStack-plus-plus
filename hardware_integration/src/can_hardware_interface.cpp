@@ -255,19 +255,62 @@ namespace isobus
 	{
 		LOCK_GUARD(Mutex, hardwareChannelsMutex);
 
+		if (started)
+		{
+			LOG_ERROR("[HardwareInterface] Cannot start interface because it is already running.");
+			return false;
+		}
+
+		if (hardwareChannels.empty())
+		{
+			LOG_ERROR("[HardwareInterface] Cannot start interface because no CAN channels are configured.");
+			return false;
+		}
+
+		bool allChannelsStarted = true;
+		for (std::uint8_t channelIndex = 0; channelIndex < static_cast<std::uint8_t>(hardwareChannels.size()); ++channelIndex)
+		{
+			auto &channel = hardwareChannels[channelIndex];
+			if (!channel->start())
+			{
+				if (nullptr == channel->frameHandler)
+				{
+					LOG_ERROR("[HardwareInterface] Cannot start channel " + to_string(channelIndex) + " because it has no assigned CAN driver.");
+				}
+				else
+				{
+					LOG_ERROR("[HardwareInterface] Failed to start CAN driver '" + channel->frameHandler->get_name() +
+					          "' on channel " + to_string(channelIndex) + ".");
+				}
+				allChannelsStarted = false;
+			}
+		}
+
+		if (!allChannelsStarted)
+		{
+			// Close any channels that did open, but retain all assignments so the
+			// caller can inspect, reconfigure, and retry the selected drivers.
+			for (auto &channel : hardwareChannels)
+			{
+				auto assignedFrameHandler = channel->frameHandler;
+				channel->stop();
+				channel->frameHandler = assignedFrameHandler;
+			}
+			return false;
+		}
+
 		if (start_thread)
 		{
 #if !defined CAN_STACK_DISABLE_THREADS && !defined ARDUINO
 			start_threads();
 #else
-			// Ignored
+			started = true;
 #endif
 		}
-		std::for_each(hardwareChannels.begin(), hardwareChannels.end(), [](const std::unique_ptr<CANHardware> &channel) {
-			channel->start();
-		});
-
-		started = true;
+		else
+		{
+			started = true;
+		}
 		return true;
 	}
 
@@ -278,10 +321,6 @@ namespace isobus
 			LOG_ERROR("[HardwareInterface] Cannot stop interface before it is started.");
 			return false;
 		}
-		frameReceivedEventDispatcher.clear_listeners();
-		frameTransmittedEventDispatcher.clear_listeners();
-		periodicUpdateEventDispatcher.clear_listeners();
-
 #if !defined CAN_STACK_DISABLE_THREADS && !defined ARDUINO
 		stop_threads();
 #endif

@@ -2,13 +2,55 @@
 
 #include "isobus/hardware_integration/can_hardware_interface.hpp"
 #include "isobus/hardware_integration/virtual_can_plugin.hpp"
+#include "isobus/hardware_integration/vector_asc_logger.hpp"
 #include "isobus/utility/system_timing.hpp"
 
 #include <chrono>
+#include <cstdio>
 #include <future>
 #include <thread>
 
 using namespace isobus;
+
+namespace
+{
+	class InvalidCANPlugin : public CANHardwarePlugin
+	{
+	public:
+		std::string get_name() const override
+		{
+			return "Invalid test CAN driver";
+		}
+
+		bool get_is_valid() const override
+		{
+			return false;
+		}
+
+		void close() override
+		{
+			++closeCount;
+		}
+
+		void open() override
+		{
+			++openCount;
+		}
+
+		bool read_frame(CANMessageFrame &) override
+		{
+			return false;
+		}
+
+		bool write_frame(const CANMessageFrame &) override
+		{
+			return false;
+		}
+
+		int openCount = 0;
+		int closeCount = 0;
+	};
+}
 
 TEST(HARDWARE_INTERFACE_TESTS, SendMessageToHardware)
 {
@@ -67,7 +109,7 @@ TEST(HARDWARE_INTERFACE_TESTS, ReceiveMessageFromHardware)
 		EXPECT_EQ(frame.data[0], 0x01);
 	};
 
-	CANHardwareInterface::get_can_frame_received_event_dispatcher().add_listener(receivedCallback);
+	const auto listener = CANHardwareInterface::get_can_frame_received_event_dispatcher().add_listener(receivedCallback);
 
 	device->write_frame_as_if_received(fakeFrame);
 
@@ -75,6 +117,7 @@ TEST(HARDWARE_INTERFACE_TESTS, ReceiveMessageFromHardware)
 	EXPECT_TRUE(future.wait_for(std::chrono::seconds(5)) != std::future_status::timeout);
 
 	CANHardwareInterface::stop();
+	CANHardwareInterface::get_can_frame_received_event_dispatcher().remove_listener(listener);
 }
 
 TEST(HARDWARE_INTERFACE_TESTS, MessageFrameSentEventListener)
@@ -106,7 +149,7 @@ TEST(HARDWARE_INTERFACE_TESTS, MessageFrameSentEventListener)
 		EXPECT_EQ(frame.data[0], 0x01);
 	};
 
-	CANHardwareInterface::get_can_frame_transmitted_event_dispatcher().add_listener(sendCallback);
+	const auto listener = CANHardwareInterface::get_can_frame_transmitted_event_dispatcher().add_listener(sendCallback);
 
 	isobus::send_can_message_frame_to_hardware(fakeFrame);
 
@@ -114,23 +157,28 @@ TEST(HARDWARE_INTERFACE_TESTS, MessageFrameSentEventListener)
 	EXPECT_TRUE(future.wait_for(std::chrono::seconds(5)) != std::future_status::timeout);
 
 	CANHardwareInterface::stop();
+	CANHardwareInterface::get_can_frame_transmitted_event_dispatcher().remove_listener(listener);
 }
 
 TEST(HARDWARE_INTERFACE_TESTS, PeriodicUpdateEventListener)
 {
-	CANHardwareInterface::start();
+	auto device = std::make_shared<VirtualCANPlugin>();
+	CANHardwareInterface::set_number_of_can_channels(1);
+	CANHardwareInterface::assign_can_channel_frame_handler(0, device);
+	ASSERT_TRUE(CANHardwareInterface::start());
 
 	int updateCount = 0;
 	std::function<void()> periodicCallback = [&updateCount]() {
 		updateCount += 1;
 	};
 
-	CANHardwareInterface::get_periodic_update_event_dispatcher().add_listener(periodicCallback);
+	const auto listener = CANHardwareInterface::get_periodic_update_event_dispatcher().add_listener(periodicCallback);
 
 	auto future = std::async(std::launch::async, [&updateCount] { while (updateCount == 0 && CANHardwareInterface::is_running()); });
 	EXPECT_TRUE(future.wait_for(std::chrono::seconds(5)) != std::future_status::timeout);
 
 	CANHardwareInterface::stop();
+	CANHardwareInterface::get_periodic_update_event_dispatcher().remove_listener(listener);
 }
 
 TEST(HARDWARE_INTERFACE_TESTS, AddRemoveHardwareFrameHandler)
@@ -139,8 +187,88 @@ TEST(HARDWARE_INTERFACE_TESTS, AddRemoveHardwareFrameHandler)
 	// We probably want CANNetworkManager to not use the singleton pattern first
 }
 
+TEST(HARDWARE_INTERFACE_TESTS, EventListenersSurviveStopStart)
+{
+	auto device = std::make_shared<VirtualCANPlugin>("EventListenersSurviveStopStart");
+	CANHardwareInterface::set_number_of_can_channels(1);
+	CANHardwareInterface::assign_can_channel_frame_handler(0, device);
+
+	int receivedCount = 0;
+	int transmittedCount = 0;
+	int periodicUpdateCount = 0;
+	const auto receivedListener = CANHardwareInterface::get_can_frame_received_event_dispatcher().add_listener([&receivedCount](const CANMessageFrame &) {
+		++receivedCount;
+	});
+	const auto transmittedListener = CANHardwareInterface::get_can_frame_transmitted_event_dispatcher().add_listener([&transmittedCount](const CANMessageFrame &) {
+		++transmittedCount;
+	});
+	const auto periodicUpdateListener = CANHardwareInterface::get_periodic_update_event_dispatcher().add_listener([&periodicUpdateCount]() {
+		++periodicUpdateCount;
+	});
+
+	CANMessageFrame frame{};
+	ASSERT_TRUE(CANHardwareInterface::start(false));
+	CANHardwareInterface::get_can_frame_received_event_dispatcher().call(frame);
+	CANHardwareInterface::get_can_frame_transmitted_event_dispatcher().call(frame);
+	CANHardwareInterface::get_periodic_update_event_dispatcher().invoke();
+	EXPECT_TRUE(CANHardwareInterface::stop());
+
+	ASSERT_TRUE(CANHardwareInterface::assign_can_channel_frame_handler(0, device));
+	ASSERT_TRUE(CANHardwareInterface::start(false));
+	CANHardwareInterface::get_can_frame_received_event_dispatcher().call(frame);
+	CANHardwareInterface::get_can_frame_transmitted_event_dispatcher().call(frame);
+	CANHardwareInterface::get_periodic_update_event_dispatcher().invoke();
+	EXPECT_TRUE(CANHardwareInterface::stop());
+
+	EXPECT_EQ(2, receivedCount);
+	EXPECT_EQ(2, transmittedCount);
+	EXPECT_EQ(2, periodicUpdateCount);
+
+	CANHardwareInterface::get_can_frame_received_event_dispatcher().remove_listener(receivedListener);
+	CANHardwareInterface::get_can_frame_transmitted_event_dispatcher().remove_listener(transmittedListener);
+	CANHardwareInterface::get_periodic_update_event_dispatcher().remove_listener(periodicUpdateListener);
+}
+
+TEST(HARDWARE_INTERFACE_TESTS, StartFailsWhenAssignedDriverDoesNotOpen)
+{
+	auto invalidDriver = std::make_shared<InvalidCANPlugin>();
+	CANHardwareInterface::set_number_of_can_channels(1);
+	ASSERT_TRUE(CANHardwareInterface::assign_can_channel_frame_handler(0, invalidDriver));
+
+	EXPECT_FALSE(CANHardwareInterface::start(false));
+	EXPECT_FALSE(CANHardwareInterface::is_running());
+	EXPECT_EQ(1, invalidDriver->openCount);
+	EXPECT_EQ(1, invalidDriver->closeCount);
+	EXPECT_EQ(invalidDriver, CANHardwareInterface::get_assigned_can_channel_frame_handler(0));
+
+	EXPECT_TRUE(CANHardwareInterface::unassign_can_channel_frame_handler(0));
+}
+
+TEST(HARDWARE_INTERFACE_TESTS, VectorLoggerOwnsItsFrameListeners)
+{
+	auto &receivedDispatcher = CANHardwareInterface::get_can_frame_received_event_dispatcher();
+	auto &transmittedDispatcher = CANHardwareInterface::get_can_frame_transmitted_event_dispatcher();
+	const auto initialReceivedListenerCount = receivedDispatcher.get_listener_count();
+	const auto initialTransmittedListenerCount = transmittedDispatcher.get_listener_count();
+	const std::string logFileName = "VectorLoggerOwnsItsFrameListeners.asc";
+
+	{
+		VectorASCLogger logger(logFileName);
+		EXPECT_EQ(initialReceivedListenerCount + 1, receivedDispatcher.get_listener_count());
+		EXPECT_EQ(initialTransmittedListenerCount + 1, transmittedDispatcher.get_listener_count());
+	}
+
+	EXPECT_EQ(initialReceivedListenerCount, receivedDispatcher.get_listener_count());
+	EXPECT_EQ(initialTransmittedListenerCount, transmittedDispatcher.get_listener_count());
+	std::remove(logFileName.c_str());
+}
+
 TEST(HARDWARE_INTERFACE_TESTS, PeriodicUpdateIntervalSetting)
 {
+	auto device = std::make_shared<VirtualCANPlugin>();
+	CANHardwareInterface::set_number_of_can_channels(1);
+	CANHardwareInterface::assign_can_channel_frame_handler(0, device);
+
 	std::uint32_t lastUpdateTime = 0;
 	std::uint32_t intervalTime = 0;
 	std::function<void()> periodicCallback = [&]() {
@@ -151,12 +279,12 @@ TEST(HARDWARE_INTERFACE_TESTS, PeriodicUpdateIntervalSetting)
 		lastUpdateTime = isobus::SystemTiming::get_timestamp_ms();
 	};
 
-	CANHardwareInterface::get_periodic_update_event_dispatcher().add_listener(periodicCallback);
+	const auto listener = CANHardwareInterface::get_periodic_update_event_dispatcher().add_listener(periodicCallback);
 
 	CANHardwareInterface::set_periodic_update_interval(10);
 	EXPECT_EQ(CANHardwareInterface::get_periodic_update_interval(), 10);
 
-	CANHardwareInterface::start();
+	ASSERT_TRUE(CANHardwareInterface::start());
 	std::future<void> future = std::async(std::launch::async, [&]() {
 		while ((intervalTime == 0) &&
 		       (intervalTime - CANHardwareInterface::get_periodic_update_interval() < 5) &&
@@ -171,6 +299,7 @@ TEST(HARDWARE_INTERFACE_TESTS, PeriodicUpdateIntervalSetting)
 	EXPECT_TRUE(future.wait_for(std::chrono::seconds(5)) != std::future_status::timeout);
 
 	CANHardwareInterface::stop();
+	CANHardwareInterface::get_periodic_update_event_dispatcher().remove_listener(listener);
 }
 
 TEST(HARDWARE_INTERFACE_TESTS, StopSetsStartedFalseInNonThreadingMode)

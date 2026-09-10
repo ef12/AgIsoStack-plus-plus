@@ -73,10 +73,13 @@ namespace isobus
 		/// the worker thread for the hardware layer is started. Typically you'll want to leave this as true.
 		/// However, if you want to drive the hardware layer yourself by calling update manually, you can
 		/// pass this in as false to not spawn the worker thread.
-		/// @returns `true` if the threads were started, otherwise false (perhaps they are already running)
+		/// @returns `true` if every configured channel opened successfully and the interface was started,
+		/// otherwise `false`
 		static bool start(bool start_thread = true);
 
 		/// @brief Stops all CAN management threads and discards all remaining messages in the Tx and Rx queues.
+		/// @note Registered event listeners remain subscribed across Stop/Start cycles. Listener owners must
+		/// explicitly remove their listeners before they are destroyed.
 		/// @returns `true` if the threads were stopped, otherwise `false`
 		static bool stop();
 

@@ -44,10 +44,13 @@ namespace isobus
 
 	VectorASCLogger::~VectorASCLogger()
 	{
-		if (logFileStream)
+		if (listenersRegistered)
 		{
 			isobus::CANHardwareInterface::get_can_frame_received_event_dispatcher().remove_listener(canFrameReceivedListener);
-			isobus::CANHardwareInterface::get_can_frame_received_event_dispatcher().remove_listener(canFrameSentListener);
+			isobus::CANHardwareInterface::get_can_frame_transmitted_event_dispatcher().remove_listener(canFrameSentListener);
+		}
+		if (logFileStream.is_open())
+		{
 			logFileStream.close();
 		}
 	}
@@ -111,6 +114,7 @@ namespace isobus
 				}
 				logFileStream << "\n";
 			});
+			listenersRegistered = true;
 		}
 		else
 		{
