@@ -65,6 +65,10 @@ set(TEST_SRC
     helpers/control_function_helpers.cpp
     helpers/messaging_helpers.cpp)
 
+if(WIN32 AND "WindowsCANAPI2" IN_LIST CAN_DRIVER)
+  list(APPEND TEST_SRC can_api2_windows_plugin_tests.cpp)
+endif()
+
 add_executable(unit_tests ${TEST_SRC} ${TEST_INCLUDE})
 set_target_properties(
   unit_tests

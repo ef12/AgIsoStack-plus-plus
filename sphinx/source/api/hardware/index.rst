@@ -41,6 +41,7 @@ When compiling with CMake, a default CAN driver plug-in will be selected for you
 
 - :code:`-DCAN_DRIVER=SocketCAN` for Socket CAN support (This is the default for Linux)
 - :code:`-DCAN_DRIVER=WindowsPCANBasic` for the windows PEAK PCAN drivers (This is the default for Windows)
+- :code:`-DCAN_DRIVER=WindowsCANAPI2` for PEAK CAN-API 2 networks, including the PCAN-Virtual driver (Windows)
 - :code:`-DCAN_DRIVER=MacCANPCAN` for the MacCAN PEAK PCAN driver (This is the default for Mac OS)
 - :code:`-DCAN_DRIVER=TWAI` for the ESP TWAI driver (This is the preferred ESP32 driver)
 - :code:`-DCAN_DRIVER=MCP2515` for the MCP2515 CAN controller
@@ -54,6 +55,8 @@ Or specify multiple using a semicolon separated list: :code:`-DCAN_DRIVER="<driv
 If your target hardware is not listed above, you can easily integrate your own hardware by :ref:`implementing a few simple functions <writing-your-own-can-driver>`.
 
 You can include the header file :code:`isobus/hardware_integration/available_can_drivers.hpp` to get access to the CAN drivers that have been included via your CMake configuration.
+
+The :code:`WindowsCANAPI2` plug-in loads the architecture-matched :code:`CanApi2.dll` from the Windows system directory at runtime. It therefore does not require a CAN-API 2 import library at build time, but the PEAK CAN-API 2 driver must be installed on the computer running the application. By default it joins the :code:`PCANLight_USB` virtual network at 250 kbit/s and creates that internal network if it does not already exist. The network name, bitrate, network creation policy, and preferred internal network handle can be changed with :code:`CANAPI2WindowsPlugin::configure` before opening the driver.
 
 Using the Hardware Interface
 ----------------------------

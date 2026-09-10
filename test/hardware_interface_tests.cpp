@@ -200,6 +200,7 @@ TEST(HARDWARE_INTERFACE_TESTS, StopSetsStartedFalseInNonThreadingMode)
 	CANHardwareInterface::stop();
 
 	EXPECT_FALSE(CANHardwareInterface::is_running());
+	EXPECT_FALSE(device->get_is_valid());
 
 	// Now we should be able to unassign frame handlers after stopping
 	// (The frame handler was automatically unassigned during stop(), so this should return false

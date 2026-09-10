@@ -49,6 +49,16 @@ if("WindowsPCANBasic" IN_LIST CAN_DRIVER)
   list(APPEND HARDWARE_INTEGRATION_SRC "pcan_basic_windows_plugin.cpp")
   list(APPEND HARDWARE_INTEGRATION_INCLUDE "pcan_basic_windows_plugin.hpp")
 endif()
+if("WindowsCANAPI2" IN_LIST CAN_DRIVER)
+  if(NOT WIN32)
+    message(
+      FATAL_ERROR
+        "WindowsCANAPI2 was selected, but PEAK CAN-API 2 is supported only on Windows."
+    )
+  endif()
+  list(APPEND HARDWARE_INTEGRATION_SRC "can_api2_windows_plugin.cpp")
+  list(APPEND HARDWARE_INTEGRATION_INCLUDE "can_api2_windows_plugin.hpp")
+endif()
 if("VirtualCAN" IN_LIST CAN_DRIVER)
   list(APPEND HARDWARE_INTEGRATION_SRC "virtual_can_plugin.cpp")
   list(APPEND HARDWARE_INTEGRATION_INCLUDE "virtual_can_plugin.hpp")

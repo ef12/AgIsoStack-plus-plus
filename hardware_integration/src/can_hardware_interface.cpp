@@ -71,6 +71,7 @@ namespace isobus
 #endif
 		if (nullptr != frameHandler)
 		{
+			frameHandler->close();
 			frameHandler = nullptr;
 		}
 		messagesToBeTransmittedQueue.clear();
