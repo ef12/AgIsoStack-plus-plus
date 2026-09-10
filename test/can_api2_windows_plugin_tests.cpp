@@ -45,6 +45,9 @@ TEST(CAN_API2_WINDOWS_PLUGIN_TESTS, ValidatesConfiguration)
 	EXPECT_EQ(250000, plugin.get_bitrate());
 	EXPECT_TRUE(plugin.get_create_missing_net());
 	EXPECT_EQ(31, plugin.get_preferred_net_handle());
+	EXPECT_EQ(CANAPI2WindowsPlugin::DeviceType::Virtual, plugin.get_device_type());
+	EXPECT_EQ("pcan_virtual", plugin.get_device_name());
+	EXPECT_EQ("PEAK PCAN Virtual (PCANLight_USB)", plugin.get_name());
 
 	EXPECT_FALSE(plugin.configure("", 250000, true, 31));
 	EXPECT_FALSE(plugin.configure("A_CAN_API2_NET_NAME_THAT_IS_TOO_LONG", 250000, true, 31));
@@ -58,6 +61,21 @@ TEST(CAN_API2_WINDOWS_PLUGIN_TESTS, ValidatesConfiguration)
 	EXPECT_EQ(500000, plugin.get_bitrate());
 	EXPECT_FALSE(plugin.get_create_missing_net());
 	EXPECT_EQ(12, plugin.get_preferred_net_handle());
+
+	CANAPI2WindowsPlugin usbPlugin("PCANLight_USB",
+	                               "AgIsoUSBTest",
+	                               CANAPI2WindowsPlugin::DEFAULT_BITRATE,
+	                               true,
+	                               CANAPI2WindowsPlugin::DEFAULT_NET_HANDLE,
+	                               CANAPI2WindowsPlugin::DeviceType::USB);
+	EXPECT_EQ(CANAPI2WindowsPlugin::DeviceType::USB, usbPlugin.get_device_type());
+	EXPECT_EQ("pcan_usb", usbPlugin.get_device_name());
+	EXPECT_EQ("PEAK PCAN USB (PCANLight_USB)", usbPlugin.get_name());
+	EXPECT_FALSE(usbPlugin.get_create_missing_net());
+
+	EXPECT_TRUE(usbPlugin.configure("USBNet", 250000, true, 12));
+	EXPECT_EQ("USBNet", usbPlugin.get_net_name());
+	EXPECT_FALSE(usbPlugin.get_create_missing_net());
 }
 
 TEST(CAN_API2_WINDOWS_PLUGIN_TESTS, ExchangesStandardAndExtendedFramesOnVirtualNet)

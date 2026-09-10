@@ -292,13 +292,15 @@ namespace isobus
 	                                           std::string clientName,
 	                                           std::uint32_t bitrate,
 	                                           bool createMissingNet,
-	                                           std::uint8_t preferredNetHandle) :
+	                                           std::uint8_t preferredNetHandle,
+	                                           DeviceType deviceType) :
 	  implementation(new Implementation()),
 	  netName(std::move(netName)),
 	  clientName(std::move(clientName)),
 	  bitrate(bitrate),
-	  createMissingNet(createMissingNet),
-	  preferredNetHandle(preferredNetHandle)
+	  createMissingNet((DeviceType::Virtual == deviceType) && createMissingNet),
+	  preferredNetHandle(preferredNetHandle),
+	  deviceType(deviceType)
 	{
 	}
 
@@ -309,7 +311,7 @@ namespace isobus
 
 	std::string CANAPI2WindowsPlugin::get_name() const
 	{
-		return "PEAK PCAN Virtual (" + netName + ")";
+		return "PEAK PCAN " + std::string(DeviceType::Virtual == deviceType ? "Virtual" : "USB") + " (" + netName + ")";
 	}
 
 	bool CANAPI2WindowsPlugin::get_is_valid() const
@@ -354,10 +356,12 @@ namespace isobus
 		}
 
 		char virtualDeviceName[] = "pcan_virtual";
-		CANAPI2Status status = implementation->setDeviceName(virtualDeviceName);
+		char usbDeviceName[] = "pcan_usb";
+		char *selectedDeviceName = (DeviceType::Virtual == deviceType) ? virtualDeviceName : usbDeviceName;
+		CANAPI2Status status = implementation->setDeviceName(selectedDeviceName);
 		if (CAN_API2_ERROR_OK != status)
 		{
-			LOG_ERROR(implementation->describe_status("selecting pcan_virtual", status));
+			LOG_ERROR(implementation->describe_status("selecting " + get_device_name(), status));
 			close();
 			return;
 		}
@@ -384,7 +388,9 @@ namespace isobus
 		status = implementation->connectToNet(implementation->clientHandle,
 		                                      const_cast<char *>(netName.c_str()),
 		                                      &implementation->netHandle);
-		if ((CAN_API2_ERROR_INVALID_NET == status) && createMissingNet)
+		if ((CAN_API2_ERROR_INVALID_NET == status) &&
+		    (DeviceType::Virtual == deviceType) &&
+		    createMissingNet)
 		{
 			std::vector<CANAPI2NetHandle> handles;
 			handles.push_back(preferredNetHandle);
@@ -460,7 +466,7 @@ namespace isobus
 		implementation->lastReadError.store(CAN_API2_ERROR_OK);
 		implementation->lastWriteError.store(CAN_API2_ERROR_OK);
 		implementation->valid.store(true);
-		LOG_INFO("[CAN-API 2]: Connected to pcan_virtual net '" + netName + "'.");
+		LOG_INFO("[CAN-API 2]: Connected to " + get_device_name() + " net '" + netName + "'.");
 	}
 
 	void CANAPI2WindowsPlugin::close()
@@ -640,7 +646,7 @@ namespace isobus
 
 		netName = newNetName;
 		bitrate = newBitrate;
-		createMissingNet = newCreateMissingNet;
+		createMissingNet = (DeviceType::Virtual == deviceType) && newCreateMissingNet;
 		preferredNetHandle = newPreferredNetHandle;
 		return true;
 	}
@@ -668,5 +674,15 @@ namespace isobus
 	std::uint8_t CANAPI2WindowsPlugin::get_preferred_net_handle() const
 	{
 		return preferredNetHandle;
+	}
+
+	CANAPI2WindowsPlugin::DeviceType CANAPI2WindowsPlugin::get_device_type() const
+	{
+		return deviceType;
+	}
+
+	std::string CANAPI2WindowsPlugin::get_device_name() const
+	{
+		return (DeviceType::Virtual == deviceType) ? "pcan_virtual" : "pcan_usb";
 	}
 }
