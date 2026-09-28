@@ -6,6 +6,9 @@
 #include "isobus/isobus/isobus_standard_data_description_indices.hpp"
 #include "isobus/utility/to_string.hpp"
 
+#include <iterator>
+#include <vector>
+
 using namespace isobus;
 
 static constexpr std::size_t NUMBER_SECTIONS_TO_CREATE = 16;
@@ -375,6 +378,20 @@ TEST(DDOP_TESTS, DeviceElementDesignatorTests)
 	EXPECT_EQ(1, objectUnderTest->get_number_child_objects());
 	objectUnderTest->remove_reference_to_child_object(111);
 	EXPECT_EQ(0, objectUnderTest->get_number_child_objects());
+
+	// The span of child IDs covers exactly the references, both iterated and indexed
+	objectUnderTest->add_reference_to_child_object(111);
+	objectUnderTest->add_reference_to_child_object(222);
+	objectUnderTest->add_reference_to_child_object(333);
+	const auto childIds = objectUnderTest->get_child_object_ids();
+	EXPECT_EQ(3, childIds.size());
+	EXPECT_EQ(3, std::distance(childIds.begin(), childIds.end()));
+	EXPECT_EQ(std::vector<std::uint16_t>({ 111, 222, 333 }), std::vector<std::uint16_t>(childIds.begin(), childIds.end()));
+	EXPECT_EQ(222, childIds[1]);
+	EXPECT_EQ(333, childIds[2]);
+	objectUnderTest->remove_reference_to_child_object(111);
+	objectUnderTest->remove_reference_to_child_object(222);
+	objectUnderTest->remove_reference_to_child_object(333);
 
 	// Test that invalid child objects are rejected
 	DeviceDescriptorObjectPool testDDOPWithBadChildren(3);
