@@ -167,6 +167,13 @@ namespace isobus
 					LOG_WARNING("[VT Server]: Client %u version %u is higher than our reported version, which is %u", managedWorkingSetList.back()->get_control_function()->get_address(), data[2], get_vt_version_byte(get_version()));
 				}
 				managedWorkingSetList.back()->set_working_set_maintenance_message_timestamp_ms(SystemTiming::get_timestamp_ms());
+
+				// The client may have sized its object pool before it connected
+				auto requestedMemory = requestedMemoryByClient.find(message.get_source_control_function());
+				if (requestedMemoryByClient.end() != requestedMemory)
+				{
+					managedWorkingSetList.back()->set_iop_size(requestedMemory->second);
+				}
 				retVal = true;
 			}
 		}
@@ -280,6 +287,14 @@ namespace isobus
 				std::uint32_t requiredMemory = (data[2] | (static_cast<std::uint32_t>(data[3]) << 8) | (static_cast<std::uint32_t>(data[4]) << 16) | (static_cast<std::uint32_t>(data[5]) << 24));
 				bool isEnoughMemory = get_is_enough_memory(requiredMemory);
 				LOG_INFO("[VT Server]: An ecu requested %u bytes of memory.", requiredMemory);
+
+				// Clients may ask before they connect, or drop and reconnect without asking again,
+				// so keep the size to show the progress of their object pool transfer.
+				// A request for 0 bytes only queries the VT version.
+				if (0 != requiredMemory)
+				{
+					requestedMemoryByClient[message.get_source_control_function()] = requiredMemory;
+				}
 
 				if (!isEnoughMemory)
 				{
@@ -430,7 +445,10 @@ namespace isobus
 				// The response is handled in process_stateless_messages
 				// but save the size requested for later use if we have a connected working set
 				std::uint32_t requiredMemory = (data[2] | (static_cast<std::uint32_t>(data[3]) << 8) | (static_cast<std::uint32_t>(data[4]) << 16) | (static_cast<std::uint32_t>(data[5]) << 24));
-				managedWorkingSet->set_iop_size(requiredMemory);
+				if (0 != requiredMemory) // A request for 0 bytes only queries the VT version
+				{
+					managedWorkingSet->set_iop_size(requiredMemory);
+				}
 			}
 			break;
 
