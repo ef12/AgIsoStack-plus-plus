@@ -158,21 +158,25 @@ namespace isobus
 			    (message.get_data()[1] & 0x01)) // Init bit is set
 			{
 				// This CF is probably trying to initiate communication with us.
-				managedWorkingSetList.emplace_back(std::make_shared<VirtualTerminalServerManagedWorkingSet>(message.get_source_control_function()));
+				// Set the working set up completely before adding it to the list: the application
+				// checks the list for maintenance timeouts from another thread, and a working set
+				// with no maintenance timestamp yet looks timed out and gets disconnected.
+				auto workingSet = std::make_shared<VirtualTerminalServerManagedWorkingSet>(message.get_source_control_function());
 				auto &data = message.get_data();
-
-				LOG_INFO("[VT Server]: Client %u initiated working set maintenance messages with version %u", managedWorkingSetList.back()->get_control_function()->get_address(), data[2]);
-				if (data[2] > get_vt_version_byte(get_version()))
-				{
-					LOG_WARNING("[VT Server]: Client %u version %u is higher than our reported version, which is %u", managedWorkingSetList.back()->get_control_function()->get_address(), data[2], get_vt_version_byte(get_version()));
-				}
-				managedWorkingSetList.back()->set_working_set_maintenance_message_timestamp_ms(SystemTiming::get_timestamp_ms());
+				workingSet->set_working_set_maintenance_message_timestamp_ms(SystemTiming::get_timestamp_ms());
 
 				// The client may have sized its object pool before it connected
 				auto requestedMemory = requestedMemoryByClient.find(message.get_source_control_function());
 				if (requestedMemoryByClient.end() != requestedMemory)
 				{
-					managedWorkingSetList.back()->set_iop_size(requestedMemory->second);
+					workingSet->set_iop_size(requestedMemory->second);
+				}
+				managedWorkingSetList.push_back(workingSet);
+
+				LOG_INFO("[VT Server]: Client %u initiated working set maintenance messages with version %u", workingSet->get_control_function()->get_address(), data[2]);
+				if (data[2] > get_vt_version_byte(get_version()))
+				{
+					LOG_WARNING("[VT Server]: Client %u version %u is higher than our reported version, which is %u", workingSet->get_control_function()->get_address(), data[2], get_vt_version_byte(get_version()));
 				}
 				retVal = true;
 			}
@@ -545,6 +549,10 @@ namespace isobus
 					{
 						versionLabel.push_back(static_cast<char>(data[i + 1]));
 					}
+
+					// Replace a version stored earlier under this label, otherwise loading
+					// the label would return the old and the new object pool together
+					delete_version(versionLabel, message.get_source_control_function()->get_NAME());
 
 					for (std::size_t i = 0; i < managedWorkingSet->get_number_iop_files(); i++)
 					{

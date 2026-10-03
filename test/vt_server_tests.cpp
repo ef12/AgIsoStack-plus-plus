@@ -9,11 +9,14 @@
 #include <gtest/gtest.h>
 
 #include "isobus/isobus/can_general_parameter_group_numbers.hpp"
+#include "isobus/isobus/can_stack_logger.hpp"
 #include "isobus/isobus/isobus_virtual_terminal_server.hpp"
 
 #include "helpers/control_function_helpers.hpp"
 #include "helpers/messaging_helpers.hpp"
 #include "helpers/test_fixture.hpp"
+
+#include <algorithm>
 
 using namespace isobus;
 
@@ -98,19 +101,26 @@ public:
 		return {};
 	}
 
-	bool save_version(const std::vector<std::uint8_t> &, const std::vector<std::uint8_t> &, NAME) override
+	bool save_version(const std::vector<std::uint8_t> &objectPool, const std::vector<std::uint8_t> &versionLabel, NAME) override
 	{
-		return false;
+		storedPools.emplace_back(versionLabel, objectPool);
+		return true;
 	}
 
-	bool delete_version(const std::vector<std::uint8_t> &, NAME) override
+	bool delete_version(const std::vector<std::uint8_t> &versionLabel, NAME) override
 	{
-		return false;
+		auto oldSize = storedPools.size();
+		storedPools.erase(std::remove_if(storedPools.begin(),
+		                                 storedPools.end(),
+		                                 [&versionLabel](const std::pair<std::vector<std::uint8_t>, std::vector<std::uint8_t>> &storedPool) { return storedPool.first == versionLabel; }),
+		                  storedPools.end());
+		return storedPools.size() != oldSize;
 	}
 
 	bool delete_all_versions(NAME) override
 	{
-		return false;
+		storedPools.clear();
+		return true;
 	}
 
 	bool delete_object_pool(NAME) override
@@ -132,6 +142,27 @@ public:
 	{
 		managedWorkingSetList.clear();
 	}
+
+	std::vector<std::pair<std::vector<std::uint8_t>, std::vector<std::uint8_t>>> storedPools; ///< Label and data of each stored object pool component
+};
+
+// Records the maintenance timestamp of the newest working set when the server logs that a client connected
+class WorkingSetPublishingLogger : public CANStackLogger
+{
+public:
+	void sink_CAN_stack_log(LoggingLevel, const std::string &logText) override
+	{
+		if ((nullptr != server) && (std::string::npos != logText.find("initiated working set maintenance")))
+		{
+			auto workingSet = server->get_managed_working_set();
+			loggedConnection = true;
+			timestampWhenLogged_ms = (nullptr != workingSet) ? workingSet->get_working_set_maintenance_message_timestamp_ms() : 0;
+		}
+	}
+
+	DerivedTestVTServer *server = nullptr;
+	bool loggedConnection = false;
+	std::uint32_t timestampWhenLogged_ms = 0;
 };
 
 class VirtualTerminalServerTest : public AgIsoStackTestFixture
@@ -164,6 +195,18 @@ protected:
 	CANMessage create_working_set_maintenance_message(bool initiating) const
 	{
 		return create_client_message({ 0xFF, static_cast<std::uint8_t>(initiating ? 0x01 : 0x00), 0x04, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF });
+	}
+
+	CANMessage create_store_version_message(const std::string &versionLabel) const
+	{
+		return create_client_message({ 0xD0,
+		                               static_cast<std::uint8_t>(versionLabel.at(0)),
+		                               static_cast<std::uint8_t>(versionLabel.at(1)),
+		                               static_cast<std::uint8_t>(versionLabel.at(2)),
+		                               static_cast<std::uint8_t>(versionLabel.at(3)),
+		                               static_cast<std::uint8_t>(versionLabel.at(4)),
+		                               static_cast<std::uint8_t>(versionLabel.at(5)),
+		                               static_cast<std::uint8_t>(versionLabel.at(6)) });
 	}
 
 	CANMessage create_object_pool_transfer_message(std::uint32_t poolBytes) const
@@ -237,4 +280,35 @@ TEST_F(VirtualTerminalServerTest, VersionQueryDoesNotClearRequestedMemory)
 
 	server.receive(create_object_pool_transfer_message(500));
 	EXPECT_FLOAT_EQ(50.0f, workingSet->iop_load_percentage());
+}
+
+TEST_F(VirtualTerminalServerTest, NewWorkingSetIsVisibleOnlyWithItsMaintenanceTimestamp)
+{
+	DerivedTestVTServer server(serverECU);
+	WorkingSetPublishingLogger logger;
+	logger.server = &server;
+	CANStackLogger::set_can_stack_logger_sink(&logger);
+	CANStackLogger::set_log_level(CANStackLogger::LoggingLevel::Info);
+
+	// Another thread checks the working sets for maintenance timeouts while the server
+	// is still connecting the client, so the working set must not look expired
+	time_source.set_time_ms(10000);
+	server.receive(create_working_set_maintenance_message(true));
+	CANStackLogger::set_can_stack_logger_sink(nullptr);
+
+	ASSERT_TRUE(logger.loggedConnection);
+	EXPECT_EQ(10000u, logger.timestampWhenLogged_ms);
+}
+
+TEST_F(VirtualTerminalServerTest, StoreVersionReplacesAStoredVersionWithTheSameLabel)
+{
+	DerivedTestVTServer server(serverECU);
+
+	server.receive(create_working_set_maintenance_message(true));
+	server.receive(create_object_pool_transfer_message(100));
+	server.receive(create_store_version_message("ABCDEFG"));
+	server.receive(create_store_version_message("ABCDEFG"));
+
+	ASSERT_EQ(1u, server.storedPools.size());
+	EXPECT_EQ(std::vector<std::uint8_t>({ 'A', 'B', 'C', 'D', 'E', 'F', 'G' }), server.storedPools.at(0).first);
 }
