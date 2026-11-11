@@ -246,7 +246,8 @@ namespace isobus
 
 	bool SocketCANInterface::write_frame(const isobus::CANMessageFrame &canFrame)
 	{
-		struct can_frame txFrame;
+		// cleared: vcan passes the padding on as written, and a CAN FD reader takes __pad for the FD flags
+		struct can_frame txFrame = {};
 		bool retVal = false;
 
 		txFrame.can_id = canFrame.identifier;
